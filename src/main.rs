@@ -1,289 +1,127 @@
-use im::{HashMap, Vector};
+use im::HashMap;
 use std::rc::Rc;
 
-type VRef = Rc<Value>;
-type EnvRef = Rc<Env>;
-
-#[derive(Debug, Clone)]
-enum Value {
-    Bool(bool),
-    Float(f32),
+#[derive(Clone, Debug)]
+enum Expr {
+    Var(String),
     Int(i32),
-    Str(String),
-    Null,
-    Object(HashMap<String, VRef>),
-    Array(Vector<VRef>),
-    Function(Function),
+    Fn(Vec<String>, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
+    Let(String, Box<Expr>, Box<Expr>),
+    // ... add other forms
 }
 
-#[derive(Debug, Clone)]
-struct Function {
+#[derive(Clone, Debug)]
+enum Value {
+    Int(i32),
+    Closure(Closure),
+}
+
+#[derive(Clone, Debug)]
+struct Closure {
     params: Vec<String>,
     body: Expr,
     env: EnvRef, // captured lexical env
 }
 
-#[derive(Debug, Clone)]
-struct Env {
-    map: HashMap<String, VRef>,
-    parent: Option<EnvRef>,
-}
-
-impl Env {
-    fn new(parent: Option<EnvRef>) -> EnvRef {
-        Rc::new(Env { map: HashMap::new(), parent })
-    }
-    fn extend(&self, name: String, val: VRef) -> EnvRef {
-        Rc::new(Env {
-            map: self.map.update(name, val),
-            parent: self.parent.clone(),
-        })
-    }
-    fn lookup(&self, name: &str) -> Option<VRef> {
-        self.map.get(name).cloned().or_else(|| {
-            self.parent.as_ref().and_then(|p| p.lookup(name))
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-enum Expr {
-    Var(String),
-    Bool(bool),
-    Float(f32),
-    Int(i32),
-    Str(String),
-    Null,
-    Object(Vec<(String, Expr)>),
-    Array(Vec<Expr>),
-    Fn(Vec<String>, Box<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
-    Let(String, Box<Expr>, Box<Expr>),
-    IfElse(Box<Expr>, Box<Expr>, Box<Expr>),
-    Binary(Box<Expr>, String, Box<Expr>),
-    Unary(String, Box<Expr>),
-    Prop(Box<Expr>, String),
-    Index(Box<Expr>, Box<Expr>),
-}
-
-#[derive(Debug)]
-enum RuntimeError {
-    TypeError(String),
-    NotFound(String),
-    ArityError(usize, usize),
-}
+type VRef = Rc<Value>;
+type Env = HashMap<String, VRef>;
+type EnvRef = Rc<Env>;
 
 fn v(val: Value) -> VRef { Rc::new(val) }
 
-fn eval(expr: &Expr, env: EnvRef) -> Result<VRef, RuntimeError> {
-    use Expr::*;
+fn env_new(parent: Option<&EnvRef>) -> EnvRef {
+    // new empty frame with optional parent: we represent parent by closure capture,
+    // so parent is not stored explicitly here (we'll use chained lookup below).
+    Rc::new(HashMap::new())
+}
+
+// lookup walks parents manually by passing parent env when needed
+fn lookup(env: &EnvRef, name: &str, parent: Option<&EnvRef>) -> Option<VRef> {
+    env.get(name).cloned().or_else(|| {
+        parent.and_then(|p| lookup(p, name, None))
+    })
+}
+
+// Evaluate expression `expr` under environment `env`.
+// `parent` is optional pointer to outer env when we constructed this env frame.
+// In this sketch we pass parent explicitly when needed (you can wrap env+parent in a struct).
+fn eval(expr: &Expr, env: &EnvRef, parent: Option<&EnvRef>) -> Result<VRef, String> {
     match expr {
-        Var(name) => env.lookup(name).ok_or(RuntimeError::NotFound(name.clone())),
-        Bool(b) => Ok(v(Value::Bool(*b))),
-        Float(n) => Ok(v(Value::Float(*n))),
-        Int(n) => Ok(v(Value::Int(*n))),
-        Str(s) => Ok(v(Value::Str(s.clone()))),
-        Null => Ok(v(Value::Null)),
-        Object(fields) => {
-            let mut map = HashMap::new();
-            for (k, e) in fields {
-                let val = eval(e, env.clone())?;
-                map.insert(k.clone(), val);
-            }
-            Ok(v(Value::Object(map)))
+        Expr::Var(name) => {
+            lookup(env, name, parent).ok_or(format!("not found {}", name))
         }
-        Array(items) => {
-            let mut vec = Vector::new();
-            for e in items {
-                vec.push_back(eval(e, env.clone())?);
-            }
-            Ok(v(Value::Array(vec)))
+        Expr::Int(n) => Ok(v(Value::Int(*n))),
+        Expr::Fn(params, body) => {
+            // Create a closure that captures the *env+parent* as the lexical environment.
+            // We pack the environment into an EnvRef that represents this frame; to
+            // allow the closure to see bindings in parent, we could wrap env+parent into one struct.
+            // For simplicity here we create a single EnvRef representing the *current lexical environment*
+            // by merging env with parent (or you can create wrapper struct).
+            // **Important:** we DO NOT evaluate the body now.
+            let captured_env = Rc::new(env.clone()); // shallow copy: env is persistent
+            Ok(v(Value::Closure(Closure {
+                params: params.clone(),
+                body: (*body).clone(),
+                env: captured_env,
+            })))
         }
-        Fn(params, body) => Ok(v(Value::Function(Function {
-            params: params.clone(),
-            body: *body.clone(),
-            env: env.clone(),
-        }))),
-        Call(fn_expr, args_expr) => {
-            let fval = eval(fn_expr, env.clone())?;
-            let args: Result<Vec<_>, _> = args_expr.iter().map(|a| eval(a, env.clone())).collect();
-            let args = args?;
-            match fval.as_ref() {
-                Value::Function(fun) => {
-                    if args.len() != fun.params.len() {
-                        return Err(RuntimeError::ArityError(fun.params.len(), args.len()));
+        Expr::Call(func_expr, arg_exprs) => {
+            let fun = eval(func_expr, env, parent)?;
+            // eager eval of args (strict language)
+            let mut arg_vals = Vec::with_capacity(arg_exprs.len());
+            for a in arg_exprs {
+                arg_vals.push(eval(a, env, parent)?);
+            }
+            match fun.as_ref() {
+                Value::Closure(cl) => {
+                    if cl.params.len() != arg_vals.len() {
+                        return Err("arity mismatch".into());
                     }
-                    let mut new_map = HashMap::new();
-                    for (p, arg) in fun.params.iter().zip(args) {
-                        new_map.insert(p.clone(), arg);
+                    // create a fresh frame mapping params -> args
+                    let mut frame = HashMap::new();
+                    for (p, argv) in cl.params.iter().zip(arg_vals.into_iter()) {
+                        frame.insert(p.clone(), argv);
                     }
-                    let call_env = Rc::new(Env {
-                        map: new_map,
-                        parent: Some(fun.env.clone()),
-                    });
-                    eval(&fun.body, call_env)
+                    let call_env = Rc::new(frame); // frame has no parent in this simple sketch
+                    // evaluate body in call_env where lookup should check call_env then cl.env (the captured env)
+                    eval(&cl.body, &call_env, Some(&cl.env))
                 }
-                _ => Err(RuntimeError::TypeError("call on non-function".into())),
+                _ => Err("not a function".into()),
             }
         }
-        Let(name, rhs, body) => {
+        Expr::Let(name, val_expr, body) => {
+            // Recursion-friendly: if RHS is a function literal, construct closure that captures
+            // a frame that will contain the binding itself.
+            let mut frame = HashMap::new();
+            let temp_env = Rc::new(frame.clone()); // frame currently empty
+            let val = match val_expr.as_ref() {
+                Expr::Fn(params, body_expr) => {
+                    // closure captures temp_env (which we will insert into below)
+                    v(Value::Closure(Closure {
+                        params: params.clone(),
+                        body: (*body_expr).clone(),
+                        env: temp_env.clone(),
+                    }))
+                }
+                _ => {
+                    // evaluate non-function RHS in temp_env so that RHS can reference the name if needed
+                    eval(val_expr, &temp_env, Some(env))?
+                }
+            };
 
-            //allow for recursive function
-            let val = eval(rhs, env.clone())?;
-            let new_env = Rc::new(Env {
-                map: env.map.update(name.clone(), val),
-                parent: env.parent.clone(),
-            });
-            eval(body, new_env)
-        }
-        
-        
-        IfElse(c, t, f) => match eval(c, env.clone())?.as_ref() {
-            Value::Bool(true) => eval(t, env),
-            Value::Bool(false) => eval(f, env),
-            _ => Err(RuntimeError::TypeError("ternary needs bool".into())),
-        },
-        Binary(a, op, b) => {
-            let av = eval(a, env.clone())?;
-            let bv = eval(b, env)?;
-            eval_binary(op, av, bv)
-        }
-        Unary(op, e) => {
-            let ev = eval(e, env)?;
-            match (op.as_str(), ev.as_ref()) {
-                ("!", Value::Bool(b)) => Ok(v(Value::Bool(!b))),
-                ("-", Value::Float(n)) => Ok(v(Value::Float(-n))),
-                _ => Err(RuntimeError::TypeError("invalid unary".into())),
-            }
-        }
-        Prop(obj_expr, key) => match eval(obj_expr, env)?.as_ref() {
-            Value::Object(map) => map.get(key).cloned().ok_or(RuntimeError::NotFound(key.clone())),
-            _ => Err(RuntimeError::TypeError("prop on non-object".into())),
-        },
-        Index(arr_expr, idx_expr) => {
-            let coll = eval(arr_expr, env.clone())?;
-            let idxv = eval(idx_expr, env)?;
-            match (coll.as_ref(), idxv.as_ref()) {
-                (Value::Array(vec), Value::Int(n)) => {
-                    vec.get(*n as usize).cloned().ok_or(RuntimeError::NotFound("index".into()))
-                }
-                (Value::Str(s), Value::Int(n)) => {
-                    s.chars().nth(*n as usize)
-                        .map(|c| v(Value::Str(c.to_string())))
-                        .ok_or(RuntimeError::NotFound("char index".into()))
-                }
-                _ => Err(RuntimeError::TypeError("invalid index".into())),
-            }
+            // insert binding into frame (frame was used to build temp_env)
+            let mut final_frame = temp_env.as_ref().clone();
+            final_frame.insert(name.clone(), val);
+            let final_env = Rc::new(final_frame);
+
+            // evaluate body in final_env; allow lookups to fall back to outer env
+            eval(body, &final_env, Some(env))
         }
     }
 }
 
-fn eval_binary(op: &str, a: VRef, b: VRef) -> Result<VRef, RuntimeError> {
-    use Value::*;
-    match (a.as_ref(), b.as_ref()) {
-        (Float(x), Float(y)) => {
-            let res = match op {
-                "+" => Float(x + y),
-                "-" => Float(x - y),
-                "*" => Float(x * y),
-                "/" => Float(x / y),
-                "==" => Bool(x == y),
-                "<"  => Bool(x < y),
-                ">"  => Bool(x > y),
-                _ => return Err(RuntimeError::TypeError(format!("op {}", op))),
-            };
-            Ok(v(res))
-        }
-        (Int(x), Int(y)) => {
-            let res = match op {
-                "+" => Int(x + y),
-                "-" => Int(x - y),
-                "*" => Int(x * y),
-                "/" => Int(x / y),
-                "==" => Bool(x == y),
-                "<"  => Bool(x < y),
-                ">"  => Bool(x > y),
-                _ => return Err(RuntimeError::TypeError(format!("op {}", op))),
-            };
-            Ok(v(res))
-        }
-        (Str(s1), Str(s2)) if op == "+" => Ok(v(Str(format!("{}{}", s1, s2)))),
-        (Bool(b1), Bool(b2)) if op == "&&" => Ok(v(Bool(*b1 && *b2))),
-        (Bool(b1), Bool(b2)) if op == "||" => Ok(v(Bool(*b1 || *b2))),
-        _ => Err(RuntimeError::TypeError("unsupported binary".into())),
-    }
-}
 
-
-fn var (name:&'static str) -> Expr {
-    Expr::Var(name.into())
-}
-
-
-fn binary(op:&'static str, a:Expr, b:Expr) -> Expr {
-    Expr::Binary(Box::new(a), op.into(), Box::new(b))
-}
-
-fn let_(name:&'static str, val:Expr, body:Expr) -> Expr {
-    Expr::Let(name.into(), Box::new(val), Box::new(body))
-}
-
-fn if_else(c:Expr, t:Expr, f:Expr) -> Expr {
-    Expr::IfElse(Box::new(c), Box::new(t), Box::new(f))
-}
-
-fn fn_(params:Vec<&'static str>, body:Expr) -> Expr {
-    Expr::Fn(params.into_iter().map(|s| s.into()).collect(), Box::new(body))
-}
-
-fn call(fn_expr:Expr, args_expr:Vec<Expr>) -> Expr {
-    Expr::Call(Box::new(fn_expr), args_expr)
-}
-
-fn int_(n:i32) -> Expr{
-    Expr::Int(n)
-}
-
-// f self x = y
-// fix f = f (fix f)
-
-
-fn recfun (name:&'static str, params:Vec<&'static str>, body:Expr) -> Expr{
-
-
-    let mut v = vec![name];
-    v.extend(params.iter().cloned());
-    let sfun = fn_(v,body,);
-
-
-    let slet = let_(name, sfun, sfun);
-    slet
+fn main(){
     
-}
-
-
-fn main() {
-    let global = Env::new(None);
-    let expr = let_("x", int_(1), binary("+", var("x"), int_(2)));
-
-
-    let expr2 = call(fn_(vec!["x"], binary("+", var("x"), int_(2))), vec![int_(3)]);
-
-    let expr3: Expr = let_(
-        "fib",
-        fn_(vec!["n".into()], if_else(
-                binary("<", var("n"), int_(2)),
-                int_(1),
-                binary("+", 
-                    call(var("fib"), vec![binary("-", var("n"),int_(1))]),
-                    call(var("fib"), vec![binary("-", var("n"),int_(2))])
-                ),)),
-
-        call(var("fib"), vec![int_(5)]));
-
-
-    match eval(&expr3, global) {
-        Ok(v) => println!("Result = {:?}", v.as_ref()),
-        Err(e) => println!("Error: {:?}", e),
-    }
 }
