@@ -1,22 +1,17 @@
 
 
-let setup = ()=>{
-  z = 22;
-  
-  let a = ()=>{
-    b()
+
+// console.log(Array.of(1,2,3))
+
+
+
+Object.prototype.forEach = function(){
+  for (let key in this) {
+    console.log(key, this[key])
   }
-
-  return a
-}
-
-let v = setup()
-
-
-
-let b = ()=>{
-  console.log("b", z)
 }
 
 
-v()
+
+({a:1,b:2,c:3})
+
