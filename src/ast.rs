@@ -45,7 +45,24 @@ pub enum Value {
     String(String),
     Boolean(bool),
     Null,
-    Undefined
+    Undefined,
+    Builtin(Builtin),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Builtin {
+    Object,
+    ObjectKeys,
+    ObjectValues,
+    ObjectEntries,
+    Array,
+    ArrayFrom,
+    DB,
+    DBGet,
+    DBSet,
+    DBHas,
+    DBDelete,
+    DBUpdate,
 }
 
 
@@ -201,3 +218,6 @@ pub fn mk_conditional(cond: Expr, then_branch: Expr, else_branch: Expr) -> Expr 
   Expr::Conditional(Box::new(cond), Box::new(then_branch), Box::new(else_branch))
 }
 
+pub fn mk_object(elems: Vec<(String, Expr)>) -> Expr {
+  Expr::Object(elems.into_iter().map(|(k,v)| ObjElem::Expr((k,v))).collect())
+}

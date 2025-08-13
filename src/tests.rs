@@ -113,7 +113,7 @@ use crate::runtime::*;
   #[test]
   fn test_parse_object(){
     let code = "{a: 1, b: 2}";
-    test_parse(code, object(vec![("a", mk_int(1)), ("b", mk_int(2))]))
+    test_parse(code, mk_object(vec![("a".into(), mk_int(1)), ("b".into(), mk_int(2))]))
   }
 
 
@@ -212,11 +212,11 @@ use crate::runtime::*;
   #[test]
   fn eval_fun_fib(){
     let code = "
-    let fib = (n)=> n < 2 ? 1 : (fib(n-1)) + (fib(n-2));
-    fib(3)
+    let fib = (n)=> n < 2 ? 1 : fib(n-1) + fib(n-2);
+    fib(5)
     ";
 
-    test_code_equiv(code, "3");
+    test_code_equiv(code, "8");
   }
 
   

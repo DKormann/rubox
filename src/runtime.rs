@@ -29,6 +29,7 @@ fn format_value(v: &Value) -> String {
     Value::Array(_) => "[Array]".into(),
     Value::Object(_) => "[Object]".into(),
     Value::Closure(_) => "[Function]".into(),
+    Value::Builtin(builtin) => format!("[Builtin]"),
   }
 }
 
@@ -71,10 +72,7 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
   Expr::Var(name) => lookup(env, name)
   .ok_or_else(|| format!("unbound variable {}", name)),
 
-
-      // Expr::Int(n) => Ok(v(Value::Int(*n))),
       Expr::Value(val) => Ok(val.clone().into()),
-
       Expr::Fn(params, body) => {
 
           Ok(v(Value::Closure(Closure {
@@ -112,6 +110,28 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
                   }
 
                   do_eval(&cl.body, &call_env)
+              }
+              Value::Builtin(builtin)=>{
+                match builtin {
+                  Builtin::ObjectKeys=>{
+                    let mut keys: Vec<Rc<Value>> = Vec::new();
+                    match arg_vals.get(0) {
+                      Some(obj)=>{
+                        match obj.as_ref() {
+                          Value::Object(obj_map)=>{
+                            for (k,_) in obj_map {
+                              keys.push(v(Value::String(k.clone())));
+                            }
+                          }
+                          _=>return Err("attempted to call Object.keys on a non-object value".into())
+                        }
+                      }
+                      _=>return Err("attempted to call Object.keys on a non-object value".into())
+                    }
+                    Ok(v(Value::Array(keys)))
+                  },
+                  _ => Err("attempted call a non‑function value".into()),
+                }
               }
               _ => Err("attempted call a non‑function value".into()),
           }
@@ -217,6 +237,63 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
             .cloned()
             .ok_or_else(|| format!("property {} not found on object", prop))
           }
+
+          Value::Array(arr)=>{
+            match prop.as_str() {
+              "length" => Ok(v(Value::Int(arr.len() as i32))),
+              "concat" => {
+                let other = do_eval(primary,env)?;
+                match other.as_ref() {
+                  Value::Array(other_arr)=>{
+                    let mut narr: Vec<Rc<Value>> = Vec::new();
+                    for v in arr {
+                      narr.push(v.clone());
+                    }
+                    for v in other_arr {
+                      narr.push(v.clone());
+                    }
+                    Ok(v(Value::Array(narr)))
+                  }
+                  _=>return Err("attempted to concatenate a non-array value".into())
+                }
+              }
+              "map" => todo!(),
+              "filter" => todo!(),
+              "reduce" => todo!(),
+              "find" => todo!(),
+              "findIndex" => todo!(),
+              "includes" => todo!(),
+              "indexOf" => todo!(),
+              "lastIndexOf" => todo!(),
+              "join" => todo!(),
+              "slice" => todo!(),
+              _=>return Err(format!("property {} not found on array", prop))
+            }
+          }
+
+          Value::Builtin(builtin)=>{
+            match builtin {
+              Builtin::Object => match prop.as_str() {
+                "keys" => Ok(v(Value::Builtin(Builtin::ObjectKeys))),
+                "values" => Ok(v(Value::Builtin(Builtin::ObjectValues))),
+                "entries" => Ok(v(Value::Builtin(Builtin::ObjectEntries))),
+                _=>return Err(format!("property {} not found on object", prop))
+              },
+              Builtin::Array => match prop.as_str() {
+                "from" => Ok(v(Value::Builtin(Builtin::ArrayFrom))),
+                _=>return Err(format!("property {} not found on array", prop))
+              },
+              Builtin::DB => match prop.as_str() {
+                "get" => Ok(v(Value::Builtin(Builtin::DBGet))),
+                "set" => Ok(v(Value::Builtin(Builtin::DBSet))),
+                "has" => Ok(v(Value::Builtin(Builtin::DBHas))),
+                "delete" => Ok(v(Value::Builtin(Builtin::DBDelete))),
+                "update" => Ok(v(Value::Builtin(Builtin::DBUpdate))),
+                _=>return Err(format!("property {} not found on db", prop))
+              },
+              _=>return Err(format!("property {} not found on builtin", prop))
+            }
+          },
           _=>return Err("attempted to access a non-object value".into())
         }
       },
@@ -231,6 +308,7 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
           Value::Array(a) => !a.is_empty(),
           Value::Object(o) => !o.is_empty(),
           Value::Closure(_) => true,
+          Value::Builtin(_) => true,
         };
         if truthy { do_eval(t, env) } else { do_eval(e, env) }
       },
@@ -305,10 +383,4 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
         }
       },
   }
-}
-
-
-
-pub fn object(elems: Vec<(&'static str, Expr)>) -> Expr {
-  Expr::Object(elems.into_iter().map(|(k,v)| ObjElem::Expr((k.into(),v))).collect())
 }
