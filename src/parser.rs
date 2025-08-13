@@ -2,6 +2,7 @@
 
 use im::HashMap;
 use std::{rc::Rc};
+use std::cell::RefCell;
 use pest::Parser as PestParser;
 use pest_derive::Parser;
 
@@ -11,7 +12,7 @@ use crate::ast::*;
 /// Create a new (empty) frame whose parent is `parent`.
 fn env_extend(parent: Option<EnvRef>) -> EnvRef {
     Rc::new(EnvData {
-        bindings: HashMap::new(),
+        bindings: RefCell::new(HashMap::new()),
         parent,
     })
 }

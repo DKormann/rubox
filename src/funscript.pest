@@ -35,9 +35,9 @@ operand    = { access_chain | primary }
 op         = { "==" | "!=" | ">=" | "<=" | "+" | "-" | "*" | "/" | ">" | "<" }
 binop      = { operand ~ op ~ operand }
 
-cond       = { operand ~ "?" ~ expr ~ ":" ~ expr }
+cond       = { (binop | operand) ~ "?" ~ expr ~ ":" ~ expr }
 
-expr       = _{ (let_ | fun | access_chain | cond | binop | primary) }
+expr       = _{ (let_ | fun | cond | binop | access_chain | primary) }
 
 
 program    = { SOI ~ expr ~ EOI }

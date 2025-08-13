@@ -75,6 +75,9 @@ use crate::runtime::*;
     test_parse("2>=2", mk_binop(mk_int(2), ">=".into(), mk_int(2)));
     test_parse("2<=2", mk_binop(mk_int(2), "<=".into(), mk_int(2)));
     test_parse("(a)=>a+1", mk_fn(vec!["a".into()], mk_binop(mk_var("a"), "+".into(), mk_int(1))));
+
+    test_parse("a(b) + 2", mk_binop(mk_call(mk_var("a"), vec![mk_var("b")]), "+".into(), mk_int(2)));
+    test_parse("a.b + 2", mk_binop(mk_access(mk_var("a"), "b".into()), "+".into(), mk_int(2)));
   }
 
   #[test]
@@ -93,6 +96,7 @@ use crate::runtime::*;
     test_code_equiv("2<=2", "true");
     test_code_equiv("(a)=>a+1", "(a)=>a+1");
   }
+
 
   #[test]
   fn test_parse_array(){
@@ -174,15 +178,50 @@ use crate::runtime::*;
     test_code_equiv("0 ? 22 : 33" , "33");
   }
 
+
+
   #[test]
-  fn full_eval_fib(){
+  fn eval_conditional2(){
+    test_code_equiv("0>1 ? 22 : 33" , "33");
+
+  }
+
+  #[test]
+  fn eval_fun_1(){
     let code = "
-    let fib = (n)=>(n+1);
-    fib(1)
+    let fun = (n)=> n < 2 ? 2 : 3;
+    fun(1)
     ";
 
     test_code_equiv(code, "2");
   }
+
+
+
+  #[test]
+  fn eval_fun_rec(){
+    let code = "
+    let fun = (n)=> n < 2 ? 2 : fun(n-1);
+    fun(3)
+    ";
+
+    test_code_equiv(code, "2");
+  }
+
+
+  #[test]
+  fn eval_fun_fib(){
+    let code = "
+    let fib = (n)=> n < 2 ? 1 : (fib(n-1)) + (fib(n-2));
+    fib(3)
+    ";
+
+    test_code_equiv(code, "3");
+  }
+
+  
+
+
 
 
 }

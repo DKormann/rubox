@@ -3,6 +3,7 @@
 
 use im::HashMap;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 
 
@@ -48,13 +49,14 @@ fn cmp_bools(a: bool, b: bool, op: &str) -> Result<VRef, String> {
 
 fn env_extend(parent: Option<EnvRef>) -> EnvRef {
 Rc::new(EnvData {
-bindings: HashMap::new(),
+bindings: RefCell::new(HashMap::new()),
 parent,
 })
 }
 
 fn lookup(env: &EnvRef, name: &str) -> Option<VRef> {
 env.bindings
+.borrow()
 .get(name)
 .cloned()
 .or_else(|| env.parent.as_ref().and_then(|p| lookup(p, name)))
@@ -101,15 +103,13 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
                       ));
                   }
 
-                  let mut frame = HashMap::new();
-                  for (param, arg) in cl.params.iter().zip(arg_vals) {
-                      frame.insert(param.clone(), arg);
-                  }
-
                   let call_env = Rc::new(EnvData {
-                      bindings: frame,
+                      bindings: RefCell::new(HashMap::new()),
                       parent: Some(cl.env.clone()),
                   });
+                  for (param, arg) in cl.params.iter().zip(arg_vals) {
+                      call_env.bindings.borrow_mut().insert(param.clone(), arg);
+                  }
 
                   do_eval(&cl.body, &call_env)
               }
@@ -118,24 +118,31 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
       }
 
       Expr::Let(name, val_expr, body) => {
-          let temp_env = env_extend(Some(env.clone()));
+          // Make a new environment frame we can mutate in place
+          let final_env = Rc::new(EnvData {
+              bindings: RefCell::new(HashMap::new()),
+              parent: Some(env.clone()),
+          });
+
+          // Evaluate RHS in an environment that already has the binding name available
+          // so recursive functions can reference themselves.
+          // Insert a temporary Undefined to allow self-reference during RHS evaluation.
+          final_env.bindings.borrow_mut().insert(name.clone(), v(Value::Undefined));
+
           let val = match val_expr.as_ref() {
               Expr::Fn(params, f_body) => {
+                  // Closure captures the final_env so recursive calls see the binding
                   v(Value::Closure(Closure {
                       params: params.clone(),
                       body: *f_body.clone(),
-                      env: temp_env.clone(),
+                      env: final_env.clone(),
                   }))
               }
-              _ => do_eval(val_expr, &temp_env)?,
+              _ => do_eval(val_expr, &final_env)?,
           };
 
-          let mut new_bindings = temp_env.bindings.clone();
-          new_bindings.insert(name.clone(), val);
-          let final_env = Rc::new(EnvData {
-              bindings: new_bindings,
-              parent: Some(env.clone()),
-          });
+          // Update binding in place
+          final_env.bindings.borrow_mut().insert(name.clone(), val);
 
           do_eval(body, &final_env)
       }

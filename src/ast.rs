@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use im::HashMap;
 
@@ -66,7 +67,7 @@ pub struct Closure {
 /// Environment -----------------------------------------------------------------
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnvData {
-    pub bindings: HashMap<String, VRef>,
+    pub bindings: RefCell<HashMap<String, VRef>>, // mutable frame
     pub parent:   Option<EnvRef>,
 }
 pub type EnvRef = Rc<EnvData>;
