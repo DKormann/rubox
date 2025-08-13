@@ -87,7 +87,25 @@ mod tests {
     let ast = crate::parse(code).expect("parse failed");
     let expect_ast = mk_index(mk_var("a"), mk_int(0));
     assert_eq!(ast, expect_ast);
-    
+  }
+
+  #[test]
+  fn test_parse_access(){
+    let code = "a.b";
+    let ast = crate::parse(code).expect("parse failed");
+    let expect_ast = mk_access(mk_var("a"), "b".into());
+    assert_eq!(ast, expect_ast);
+
+    let code = "a.b(22)";
+    let ast = crate::parse(code).expect("parse failed");
+    let expect_ast = mk_call(mk_access(mk_var("a".into()), "b".into()), vec![mk_int(22)]);
+    assert_eq!(ast, expect_ast);
+
+
+
+
+
+
   }
 
 
@@ -95,7 +113,6 @@ mod tests {
   fn fn_call_eval(){
     let code = "((x)=>x)(22)";
     test_code_equiv(code, "22");
-
     test_code_equiv("((x,y)=>y)(1,2)", "2");
     test_code_equiv("((x,y)=>x)(1,2)", "1");
   }
@@ -109,6 +126,13 @@ mod tests {
   #[test]
   fn obj_get_eval(){
     test_code_equiv("({a:22}).a", "22");
+  }
+
+  #[test]
+  fn full_eval_complex(){
+    test_code_equiv("let o = {a:22}; o.a", "22");
+    test_code_equiv("let o = {a:22}; let x = o.a; x", "22");
+    test_code_equiv("let o = {f:(x)=>x}; (o.f)(22)", "22");
   }
 
 

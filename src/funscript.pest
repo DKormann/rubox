@@ -18,14 +18,18 @@ prop       = { ident ~ ":" ~ expr }
 array      = { "[" ~ (expr ~ ("," ~ expr)* ~ (",")?)? ~ "]" }
 object     = { "{" ~ (prop ~ ("," ~ prop)* ~ (",")?)? ~ "}" }
 
-primary    = _{ literal | ident | array | object | "(" ~ expr ~ ")" }
-fun        = { params ~ "=>" ~ expr }
-call       = { primary ~ arglist+ }
 
 let_       = { "let" ~ ident ~ "=" ~ expr ~ ";" ~ expr }
+fun        = { params ~ "=>" ~ expr }
 
-index      = { primary ~ "[" ~ expr ~ "]" }
-access     = { primary ~ "." ~ ident }
-binop      = { primary ~ ("+" | "-" | "*" | "/" | "==" | "!=" | ">" | "<" | ">=" | "<=") ~ primary }
+primary    = _{ literal | ident | array | object | "(" ~ expr ~ ")" }
 
-expr       = _{ let_ | fun | call | index | access | binop | primary}
+
+field = {"." ~ ident}
+index = {"[" ~ expr ~ "]"}
+
+access_chain = {primary ~ WHITESPACE? ~ (field | index | arglist)+}
+
+binop      = { primary ~ ("+" | "-" | "*" | "/" | "==" | "!=" | ">" | "<" | ">=" | "<=") ~ access_chain }
+
+expr       = _{ let_ | fun | access_chain | binop | primary}

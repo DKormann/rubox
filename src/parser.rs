@@ -45,15 +45,15 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
       let body = build_expr(inner.next().unwrap())?;
       Ok(mk_fn(params,body))
     }
-    Rule::call => {
-      let mut inner: pest::iterators::Pairs<'_, Rule> = pair.into_inner();
-      let mut current = build_expr(inner.next().unwrap())?; // primary
-      for arglist in inner { // one or more arglists
-        let args = build_arglist(arglist)?;
-        current = mk_call(current, args);
-      }
-      Ok(current)
-    }
+    // Rule::call => {
+    //   let mut inner: pest::iterators::Pairs<'_, Rule> = pair.into_inner();
+    //   let mut current = build_expr(inner.next().unwrap())?; // primary
+    //   for arglist in inner { // one or more arglists
+    //     let args = build_arglist(arglist)?;
+    //     current = mk_call(current, args);
+    //   }
+    //   Ok(current)
+    // }
     Rule::primary => build_expr(pair.into_inner().next().unwrap()),
     Rule::ident => Ok(Expr::Var(pair.as_str().to_string())),
     Rule::literal => build_literal(pair),
@@ -68,16 +68,44 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
       Ok(mk_index(primary,index))
     },
 
-    Rule::access =>{
+    // Rule::access =>{
+    //   let mut inner = pair.into_inner();
+    //   let primary = build_expr(inner.next().unwrap())?;
+    //   let prop = inner.next().unwrap().as_str();
+    //   Ok(mk_access(primary,prop.into()))
+    // },
+
+    Rule::access_chain =>{
+
       let mut inner = pair.into_inner();
       let primary = build_expr(inner.next().unwrap())?;
-      let prop = inner.next().unwrap().as_str();
-      Ok(mk_access(primary,prop.into()))
+
+      let mut current = primary;
+      for p in inner {
+        match p.as_rule() {
+          Rule::field => {
+            let prop = p.as_str().to_string();
+            current = mk_access(current, prop.split_once('.').unwrap().1.to_string());
+          }
+          Rule::index => {
+            let index = build_expr(p.into_inner().next().unwrap())?;
+            current = mk_index(current, index);
+          }
+          Rule::arglist => {
+            let args = build_arglist(p)?;
+            current = mk_call(current, args);
+          }
+          _ => unreachable!("unhandled rule: {:?}", p.as_rule()),
+        }
+      };
+      Ok(current)
     },
 
     _ => unreachable!("unhandled rule: {:?}", pair.as_rule()),
   }
 }
+
+
 
 fn build_params(pair: pest::iterators::Pair<Rule>) -> Vec<String> {
   let mut params: Vec<String> = Vec::new();
