@@ -6,6 +6,9 @@ funscript is a pure functional subset of javascript. any funscript code is also 
 
 funscript does not allow mutation of variables, and does not allow mutation of properties of objects.
 
+
+
+
 ## Syntax
 
 
