@@ -191,7 +191,7 @@ pub fn mk_access(primary: Expr, property: String) -> Expr {
   Expr::Access(Box::new(primary), property)
 }
 
-pub fn mk_binop(left: Expr, op: &'static str, right: Expr) -> Expr {
-  Expr::Binop(Box::new(left), op.into(), Box::new(right))
+pub fn mk_binop(left: Expr, op: String, right: Expr) -> Expr {
+  Expr::Binop(Box::new(left), op, Box::new(right))
 }
 

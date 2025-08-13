@@ -1,4 +1,5 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
 COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* }
 
 ident      = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -20,7 +21,7 @@ object     = { "{" ~ (prop ~ ("," ~ prop)* ~ (",")?)? ~ "}" }
 
 
 let_       = { "let" ~ ident ~ "=" ~ expr ~ ";" ~ expr }
-fun        = { params ~ "=>" ~ expr }
+fun        = { params  ~ "=>" ~ expr }
 
 primary    = _{ literal | ident | array | object | "(" ~ expr ~ ")" }
 
@@ -28,8 +29,11 @@ primary    = _{ literal | ident | array | object | "(" ~ expr ~ ")" }
 field = {"." ~ ident}
 index = {"[" ~ expr ~ "]"}
 
-access_chain = {primary ~ WHITESPACE? ~ (field | index | arglist)+}
+access_chain = {primary  ~ (field | index | arglist)+}
 
 binop      = { primary ~ ("+" | "-" | "*" | "/" | "==" | "!=" | ">" | "<" | ">=" | "<=") ~ access_chain }
 
-expr       = _{ let_ | fun | access_chain | binop | primary}
+expr       = _{ (let_ | fun | access_chain | binop | primary) }
+
+
+program    = { SOI ~ expr ~ EOI }

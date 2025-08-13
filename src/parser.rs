@@ -22,9 +22,10 @@ fn env_extend(parent: Option<EnvRef>) -> EnvRef {
 struct FunscriptParser;
 
 pub fn parse(input: &str) -> Result<Expr, pest::error::Error<Rule>> {
-  let mut pairs = FunscriptParser::parse(Rule::expr, input)?;
+  let mut pairs = FunscriptParser::parse(Rule::program, input)?;
   let pair = pairs.next().unwrap();
-  build_expr(pair)
+
+  build_expr(pair.into_inner().next().unwrap())
 }
 
 fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Error<Rule>> {
@@ -60,6 +61,13 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
     Rule::int | Rule::float | Rule::string | Rule::boolean | Rule::null | Rule::undefined => build_literal(pair),
     Rule::array => build_array(pair),
     Rule::object => build_object(pair),
+    Rule::binop => {
+      let mut inner = pair.into_inner();
+      let left = build_expr(inner.next().unwrap())?;
+      let op = inner.next().unwrap().as_str().to_string();
+      let right = build_expr(inner.next().unwrap())?;
+      Ok(mk_binop(left, op, right))
+    },
 
     Rule::index => {
       let mut inner = pair.into_inner();
@@ -67,13 +75,6 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
       let index = build_expr(inner.next().unwrap())?;
       Ok(mk_index(primary,index))
     },
-
-    // Rule::access =>{
-    //   let mut inner = pair.into_inner();
-    //   let primary = build_expr(inner.next().unwrap())?;
-    //   let prop = inner.next().unwrap().as_str();
-    //   Ok(mk_access(primary,prop.into()))
-    // },
 
     Rule::access_chain =>{
 
