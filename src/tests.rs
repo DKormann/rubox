@@ -167,16 +167,22 @@ use crate::runtime::*;
     test_code_equiv("let o = {f:(x)=>x}; (o.f)(22)", "22");
   }
 
+  #[test]
+  fn eval_conditional(){
+    test_code_equiv("true ? 22 : 33" , "22");
+    test_code_equiv("1 ? 22 : 33" , "22");
+    test_code_equiv("0 ? 22 : 33" , "33");
+  }
 
-  // #[test]
-  // fn full_eval_fib(){
-  //   let code = "
-  //   let fib  = (n)=>(n+1);
-  //   fib
-  //   ";
+  #[test]
+  fn full_eval_fib(){
+    let code = "
+    let fib = (n)=>(n+1);
+    fib(1)
+    ";
 
-  //   test_code_equiv(code, code);
-  // }
+    test_code_equiv(code, "2");
+  }
 
 
 }

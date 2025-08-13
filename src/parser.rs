@@ -62,6 +62,13 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
     Rule::int | Rule::float | Rule::string | Rule::boolean | Rule::null | Rule::undefined => build_literal(pair),
     Rule::array => build_array(pair),
     Rule::object => build_object(pair),
+    Rule::cond => {
+      let mut inner = pair.into_inner();
+      let c = build_expr(inner.next().unwrap())?;
+      let t = build_expr(inner.next().unwrap())?;
+      let e = build_expr(inner.next().unwrap())?;
+      Ok(mk_conditional(c,t,e))
+    },
     Rule::binop => {
       let mut inner = pair.into_inner();
       let left = build_expr(inner.next().unwrap())?;

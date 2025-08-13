@@ -16,6 +16,7 @@ pub enum Expr {
   Index(Box<Expr>, Box<Expr>),
   Access(Box<Expr>, String),
   Binop(Box<Expr>, String, Box<Expr>),
+  Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 
@@ -193,5 +194,9 @@ pub fn mk_access(primary: Expr, property: String) -> Expr {
 
 pub fn mk_binop(left: Expr, op: String, right: Expr) -> Expr {
   Expr::Binop(Box::new(left), op, Box::new(right))
+}
+
+pub fn mk_conditional(cond: Expr, then_branch: Expr, else_branch: Expr) -> Expr {
+  Expr::Conditional(Box::new(cond), Box::new(then_branch), Box::new(else_branch))
 }
 

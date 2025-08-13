@@ -213,6 +213,20 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
           _=>return Err("attempted to access a non-object value".into())
         }
       },
+      Expr::Conditional(c,t,e) => {
+        let v = do_eval(c, env)?;
+        let truthy = match v.as_ref() {
+          Value::Boolean(b) => *b,
+          Value::Null | Value::Undefined => false,
+          Value::Int(n) => *n != 0,
+          Value::Float(f) => *f != 0.0,
+          Value::String(s) => !s.is_empty(),
+          Value::Array(a) => !a.is_empty(),
+          Value::Object(o) => !o.is_empty(),
+          Value::Closure(_) => true,
+        };
+        if truthy { do_eval(t, env) } else { do_eval(e, env) }
+      },
       Expr::Binop(left, op, right) => {
         use std::convert::TryFrom;
         // Evaluate operands
