@@ -31,7 +31,9 @@ index = {"[" ~ expr ~ "]"}
 
 access_chain = {primary  ~ (field | index | arglist)+}
 
-binop      = { primary ~ ("+" | "-" | "*" | "/" | "==" | "!=" | ">" | "<" | ">=" | "<=") ~ access_chain }
+operand    = { access_chain | primary }
+op         = { "==" | "!=" | ">=" | "<=" | "+" | "-" | "*" | "/" | ">" | "<" }
+binop      = { operand ~ op ~ operand }
 
 expr       = _{ (let_ | fun | access_chain | binop | primary) }
 

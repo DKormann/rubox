@@ -12,6 +12,40 @@ fn v(val: Value) -> VRef {
 Rc::new(val)
 }
 
+fn stringify_value(v: &Value) -> String { format_value(v) }
+
+fn format_value(v: &Value) -> String {
+  match v {
+    Value::Int(n) => n.to_string(),
+    Value::Float(f) => {
+      let mut s = f.to_string();
+      if s.contains('.') { s } else { format!("{}.0", s) }
+    }
+    Value::String(s) => s.clone(),
+    Value::Boolean(b) => b.to_string(),
+    Value::Null => "null".into(),
+    Value::Undefined => "undefined".into(),
+    Value::Array(_) => "[Array]".into(),
+    Value::Object(_) => "[Object]".into(),
+    Value::Closure(_) => "[Function]".into(),
+  }
+}
+
+fn cmp_numbers(a: f64, b: f64, op: &str) -> Result<VRef, String> {
+  let res = match op { "==" => a == b, "!=" => a != b, ">" => a > b, "<" => a < b, ">=" => a >= b, "<=" => a <= b, _ => unreachable!() };
+  Ok(v(Value::Boolean(res)))
+}
+
+fn cmp_strings(a: &String, b: &String, op: &str) -> Result<VRef, String> {
+  let res = match op { "==" => a == b, "!=" => a != b, ">" => a > b, "<" => a < b, ">=" => a >= b, "<=" => a <= b, _ => unreachable!() };
+  Ok(v(Value::Boolean(res)))
+}
+
+fn cmp_bools(a: bool, b: bool, op: &str) -> Result<VRef, String> {
+  let res = match op { "==" => a == b, "!=" => a != b, ">" => a && !b, "<" => !a && b, ">=" => a || (!a && !b), "<=" => !a || (a && b), _ => unreachable!() };
+  Ok(v(Value::Boolean(res)))
+}
+
 fn env_extend(parent: Option<EnvRef>) -> EnvRef {
 Rc::new(EnvData {
 bindings: HashMap::new(),
@@ -179,7 +213,76 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
           _=>return Err("attempted to access a non-object value".into())
         }
       },
-      _ => todo!(),
+      Expr::Binop(left, op, right) => {
+        use std::convert::TryFrom;
+        // Evaluate operands
+        let lv = do_eval(left, env)?;
+        let rv = do_eval(right, env)?;
+
+        match op.as_str() {
+          "+" => {
+            match (lv.as_ref(), rv.as_ref()) {
+              (Value::Int(a), Value::Int(b)) => Ok(v(Value::Int(a + b))),
+              (Value::Float(a), Value::Float(b)) => Ok(v(Value::Float(a + b))),
+              (Value::String(a), Value::String(b)) => Ok(v(Value::String(format!("{}{}", a, b)))),
+              (Value::String(a), other) => Ok(v(Value::String(format!("{}{}", a, stringify_value(other))))),
+              (other, Value::String(b)) => Ok(v(Value::String(format!("{}{}", stringify_value(other), b)))),
+              (Value::Int(a), Value::Float(b)) => Ok(v(Value::Float(*a as f64 + b))),
+              (Value::Float(a), Value::Int(b)) => Ok(v(Value::Float(a + *b as f64))),
+              _ => Err("unsupported + operands".into()),
+            }
+          }
+          "-" | "*" | "/" => {
+            // Coerce numeric pairs (int/float)
+            let as_float = match (lv.as_ref(), rv.as_ref()) {
+              (Value::Int(a), Value::Int(b)) => (Some(*a as f64), Some(*b as f64)),
+              (Value::Int(a), Value::Float(b)) => (Some(*a as f64), Some(*b)),
+              (Value::Float(a), Value::Int(b)) => (Some(*a), Some(*b as f64)),
+              (Value::Float(a), Value::Float(b)) => (Some(*a), Some(*b)),
+              _ => (None, None),
+            };
+            if let (Some(a), Some(b)) = as_float {
+              // If both were Ints, prefer Int results when exact
+              if let (Value::Int(ai), Value::Int(bi)) = (lv.as_ref(), rv.as_ref()) {
+                match op.as_str() {
+                  "-" => return Ok(v(Value::Int(ai - bi))),
+                  "*" => return Ok(v(Value::Int(ai * bi))),
+                  "/" => {
+                    if *bi == 0 { return Err("division by zero".into()); }
+                    if ai % bi == 0 { return Ok(v(Value::Int(ai / bi))); }
+                    return Ok(v(Value::Float(a / b)));
+                  }
+                  _ => unreachable!(),
+                }
+              }
+              // Mixed numeric types -> Float
+              let res = match op.as_str() { "-" => a - b, "*" => a * b, "/" => a / b, _ => unreachable!() };
+              Ok(v(Value::Float(res)))
+            } else {
+              Err("numeric operator on non-numeric values".into())
+            }
+          }
+          "==" | "!=" | ">" | "<" | ">=" | "<=" => {
+            let res = match (lv.as_ref(), rv.as_ref(), op.as_str()) {
+              // numeric comparisons (coerce to float)
+              (Value::Int(a), Value::Int(b), op) => cmp_numbers(*a as f64, *b as f64, op),
+              (Value::Int(a), Value::Float(b), op) => cmp_numbers(*a as f64, *b, op),
+              (Value::Float(a), Value::Int(b), op) => cmp_numbers(*a, *b as f64, op),
+              (Value::Float(a), Value::Float(b), op) => cmp_numbers(*a, *b, op),
+              // string comparisons
+              (Value::String(a), Value::String(b), op) => cmp_strings(a, b, op),
+              // boolean comparisons
+              (Value::Boolean(a), Value::Boolean(b), op) => cmp_bools(*a, *b, op),
+              // equality/inequality for other types: pointer/variant equality
+              (la, rb, "==") => Ok(v(Value::Boolean(std::mem::discriminant(la) == std::mem::discriminant(rb) && format_value(la) == format_value(rb)))),
+              (la, rb, "!=") => Ok(v(Value::Boolean(!(std::mem::discriminant(la) == std::mem::discriminant(rb) && format_value(la) == format_value(rb))))),
+              _ => Err("unsupported comparison operands".into()),
+            }?;
+            Ok(res)
+          }
+          _ => Err("unknown operator".into()),
+        }
+      },
   }
 }
 

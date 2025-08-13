@@ -56,6 +56,7 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
     //   Ok(current)
     // }
     Rule::primary => build_expr(pair.into_inner().next().unwrap()),
+    Rule::operand => build_expr(pair.into_inner().next().unwrap()),
     Rule::ident => Ok(Expr::Var(pair.as_str().to_string())),
     Rule::literal => build_literal(pair),
     Rule::int | Rule::float | Rule::string | Rule::boolean | Rule::null | Rule::undefined => build_literal(pair),
