@@ -24,4 +24,8 @@ call       = { primary ~ arglist+ }
 
 let_       = { "let" ~ ident ~ "=" ~ expr ~ ";" ~ expr }
 
-expr       = _{ let_ | fun | call | primary }
+index      = { primary ~ "[" ~ expr ~ "]" }
+access     = { primary ~ "." ~ ident }
+binop      = { primary ~ ("+" | "-" | "*" | "/" | "==" | "!=" | ">" | "<" | ">=" | "<=") ~ primary }
+
+expr       = _{ let_ | fun | call | primary | index | access | binop }

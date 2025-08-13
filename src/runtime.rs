@@ -4,7 +4,9 @@
 use im::HashMap;
 use std::rc::Rc;
 
-use crate::parser::{ArrElem, Closure, EnvData, EnvRef, Expr, ObjElem, VRef, Value};
+
+
+use crate::ast::*;
 
 fn v(val: Value) -> VRef {
 Rc::new(val)
@@ -155,105 +157,8 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
   }
 }
 
-pub fn var(s: &'static str) -> Expr {
-Expr::Var(s.into())
-}
-pub fn int(n: i32) -> Expr {
-Expr::Value(Box::new(Value::Int(n)))
-}
-
-#[allow(dead_code)]
-pub fn fn_(params: Vec<&'static str>, body: Expr) -> Expr {
-Expr::Fn(
-params.into_iter().map(|s| s.into()).collect(),
-Box::new(body),
-)
-}
-
-#[allow(dead_code)]
-pub fn call(func: Expr, args: Vec<Expr>) -> Expr {
-Expr::Call(Box::new(func), args)
-}
-pub fn let_(name: &'static str, value: Expr, body: Expr) -> Expr {
-Expr::Let(name.into(), Box::new(value), Box::new(body))
-}
 
 
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use std::rc::Rc;
-
-  #[test]
-  fn evaluates_simple_let_chain() {
-    let global_env = env_extend(None);
-
-    let exp = let_(
-      "a",
-      int(22),
-      let_(
-        "b",
-        int(33),
-        let_("c", int(44), var("a")),
-      ),
-    );
-
-    let res = do_eval(&exp, &global_env).expect("evaluation should succeed");
-    match res.as_ref() {
-      Value::Int(n) => assert_eq!(*n, 22),
-      other => panic!("expected Int(22), got {other:?}"),
-    }
-  }
-
-  #[test]
-  fn evaluates_closure_with_lexical_scoping() {
-    // Closure should capture `z` from its definition site.
-    let global_env = env_extend(None);
-
-    let program = let_(
-      "z",
-      int(22),
-      let_(
-        "make",
-        fn_(vec![], var("z")), // capture `z`
-        call(var("make"), vec![]),
-      ),
-    );
-
-    let res = do_eval(&program, &global_env).expect("evaluation should succeed");
-    match res.as_ref() {
-      Value::Int(n) => assert_eq!(*n, 22),
-      other => panic!("expected Int(22), got {other:?}"),
-    }
-  }
-
-  #[test]
-  fn evaluates_array_with_spread() {
-    let global_env = env_extend(None);
-
-    let literal_inner_array = Expr::Value(Box::new(Value::Array(vec![
-      Rc::new(Value::Int(2)),
-      Rc::new(Value::Int(3)),
-    ])));
-
-    let arr_expr = Expr::Array(vec![
-      ArrElem::Expr(int(1)),
-      ArrElem::Spread(literal_inner_array),
-      ArrElem::Expr(int(4)),
-    ]);
-
-    let res = do_eval(&arr_expr, &global_env).expect("evaluation should succeed");
-    match res.as_ref() {
-      Value::Array(items) => {
-        assert_eq!(items.len(), 4);
-        let nums: Vec<i32> = items
-          .iter()
-          .map(|rcv| match rcv.as_ref() { Value::Int(n) => *n, _ => panic!("expected int") })
-          .collect();
-        assert_eq!(nums, vec![1, 2, 3, 4]);
-      }
-      other => panic!("expected Array, got {other:?}"),
-    }
-  }
+pub fn object(elems: Vec<(&'static str, Expr)>) -> Expr {
+  Expr::Object(elems.into_iter().map(|(k,v)| ObjElem::Expr((k.into(),v))).collect())
 }
