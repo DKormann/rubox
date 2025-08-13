@@ -153,6 +153,32 @@ fn do_eval(expr: &Expr, env: &EnvRef) -> Result<VRef, String> {
 
           Ok(v(Value::Object(obj)))
       }
+      Expr::Index(arr, idx)=> {
+        let arr_val = do_eval(arr,env)?;
+        let idx_val = do_eval(idx,env)?;
+        match arr_val.as_ref() {
+          Value::Array(items) => {
+            use std::convert::TryFrom;
+            let i: i32 = i32::try_from(idx_val.as_ref()).map_err(|_| "index must be an Int")?;
+            if i < 0 || (i as usize) >= items.len() {
+              return Err("index out of bounds".into());
+            }
+            Ok(items[i as usize].clone())
+          }
+          _=>return Err("attempted to index a non-array value".into())
+        }
+      },
+      Expr::Access(primary, prop)=> {
+        let primary_val = do_eval(primary,env)?;
+        match primary_val.as_ref() {
+          Value::Object(obj) => {
+            obj.get(prop)
+            .cloned()
+            .ok_or_else(|| format!("property {} not found on object", prop))
+          }
+          _=>return Err("attempted to access a non-object value".into())
+        }
+      },
       _ => todo!(),
   }
 }

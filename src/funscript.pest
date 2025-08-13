@@ -28,4 +28,4 @@ index      = { primary ~ "[" ~ expr ~ "]" }
 access     = { primary ~ "." ~ ident }
 binop      = { primary ~ ("+" | "-" | "*" | "/" | "==" | "!=" | ">" | "<" | ">=" | "<=") ~ primary }
 
-expr       = _{ let_ | fun | call | primary | index | access | binop }
+expr       = _{ let_ | fun | call | index | access | binop | primary}

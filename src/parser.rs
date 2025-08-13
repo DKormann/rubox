@@ -35,7 +35,8 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
       let name = inner.next().unwrap().as_str().to_string();
       let init = build_expr(inner.next().unwrap())?;
       let body = build_expr(inner.next().unwrap())?;
-      Ok(Expr::Let(name, Box::new(init), Box::new(body)))
+
+      Ok(mk_let(name, init, body))
     }
     Rule::fun => {
       let mut inner = pair.into_inner();
@@ -49,7 +50,7 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
       let mut current = build_expr(inner.next().unwrap())?; // primary
       for arglist in inner { // one or more arglists
         let args = build_arglist(arglist)?;
-        current = Expr::Call(Box::new(current), args);
+        current = mk_call(current, args);
       }
       Ok(current)
     }
@@ -65,7 +66,14 @@ fn build_expr(pair: pest::iterators::Pair<Rule>) -> Result<Expr, pest::error::Er
       let primary = build_expr(inner.next().unwrap())?;
       let index = build_expr(inner.next().unwrap())?;
       Ok(mk_index(primary,index))
-    }
+    },
+
+    Rule::access =>{
+      let mut inner = pair.into_inner();
+      let primary = build_expr(inner.next().unwrap())?;
+      let prop = inner.next().unwrap().as_str();
+      Ok(mk_access(primary,prop.into()))
+    },
 
     _ => unreachable!("unhandled rule: {:?}", pair.as_rule()),
   }

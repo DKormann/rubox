@@ -11,7 +11,7 @@ mod tests {
   fn test_let(){
     let code = "let x = 2; x";
     let ast = crate::parse(code).expect("parse failed");
-    let expect_ast = mk_let("x", mk_int(2), mk_var("x"));
+    let expect_ast = mk_let("x".into(), mk_int(2), mk_var("x"));
     assert_eq!(ast, expect_ast);
     let res = crate::runtime::eval(&ast).expect("eval failed");
     let expect_res = crate::runtime::eval(&mk_int(2)).expect("eval failed");
@@ -23,7 +23,7 @@ mod tests {
   fn test_let_chain(){
     let code = "let x = 2; let y = x; y";
     let ast = crate::parse(code).expect("parse failed");
-    let expect_ast = mk_let("x", mk_int(2), mk_let("y", mk_var("x"), mk_var("y")));
+    let expect_ast = mk_let("x".into(), mk_int(2), mk_let("y".into(), mk_var("x"), mk_var("y")));
     assert_eq!(ast, expect_ast);
     let res = crate::runtime::eval(&ast).expect("eval failed");
     let expect_res = crate::runtime::eval(&mk_int(2)).expect("eval failed");
@@ -83,9 +83,9 @@ mod tests {
 
   #[test]
   fn test_parse_index(){
-    let code = "([1])[0]";
+    let code = "a[0]";
     let ast = crate::parse(code).expect("parse failed");
-    let expect_ast = mk_index(mk_array(vec![mk_int(1)]), mk_int(0));
+    let expect_ast = mk_index(mk_var("a"), mk_int(0));
     assert_eq!(ast, expect_ast);
     
   }
@@ -97,7 +97,7 @@ mod tests {
     test_code_equiv(code, "22");
 
     test_code_equiv("((x,y)=>y)(1,2)", "2");
-    test_code_equiv("((x,y)=>y)(1,2)", "1");
+    test_code_equiv("((x,y)=>x)(1,2)", "1");
   }
 
   #[test]
